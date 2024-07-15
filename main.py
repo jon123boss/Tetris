@@ -44,11 +44,11 @@ def draw_grid(screen, grid):
             pygame.draw.rect(screen, color, (x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE))
             pygame.draw.rect(screen, BLACK, (x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE), 1)
 
-def draw_tetromino(screen, tetromino, offset):
+def draw_tetromino(screen, shape_key, tetromino, offset):
     """Draw the tetromino on the screen."""
-    shape, (off_x, off_y) = tetromino, offset
-    color = COLORS[shape[0]]
-    for y, row in enumerate(shape):
+    off_x, off_y = offset
+    color = COLORS[shape_key]
+    for y, row in enumerate(tetromino):
         for x, cell in enumerate(row):
             if cell:
                 pygame.draw.rect(screen, color, ((x + off_x) * CELL_SIZE, (y + off_y) * CELL_SIZE, CELL_SIZE, CELL_SIZE))
@@ -61,9 +61,44 @@ def handle_events():
             return False
     return True
 
-def update_game():
+def move_tetromino(tetromino, offset, direction, grid):
+    """Move the tetromino in the specified direction if possible."""
+    shape, (off_x, off_y) = tetromino
+    if direction == 'left':
+        new_x = off_x - 1
+        if is_valid_move(shape, (new_x, off_y), grid):
+            return shape, (new_x, off_y)
+    elif direction == 'right':
+        new_x = off_x + 1
+        if is_valid_move(shape, (new_x, off_y), grid):
+            return shape, (new_x, off_y)
+    elif direction == 'down':
+        new_y = off_y + 1
+        if is_valid_move(shape, (off_x, new_y), grid):
+            return shape, (off_x, new_y)
+    return tetromino
+
+def is_valid_move(shape, offset, grid):
+    """Check if the tetromino move is valid within the grid."""
+    off_x, off_y = offset
+    for y, row in enumerate(shape):
+        for x, cell in enumerate(row):
+            if cell:
+                new_x, new_y = x + off_x, y + off_y
+                if new_x < 0 or new_x >= GRID_SIZE[0] or new_y >= GRID_SIZE[1] or (new_y >= 0 and grid[new_y][new_x] != 0):
+                    return False
+    return True
+
+def update_game(tetromino, grid):
     """Update the game state."""
-    pass
+    keys = pygame.key.get_pressed()
+    if keys[pygame.K_LEFT]:
+        return move_tetromino(tetromino, tetromino[1], 'left', grid)
+    if keys[pygame.K_RIGHT]:
+        return move_tetromino(tetromino, tetromino[1], 'right', grid)
+    if keys[pygame.K_DOWN]:
+        return move_tetromino(tetromino, tetromino[1], 'down', grid)
+    return tetromino
 
 def create_grid():
     """Create a 2D array to represent the grid."""
@@ -71,21 +106,22 @@ def create_grid():
 
 def get_random_tetromino():
     """Return a random tetromino shape."""
-    shape = random.choice(list(TETROMINOS.keys()))
-    return TETROMINOS[shape], (shape, 3, 0)
+    shape_key = random.choice(list(TETROMINOS.keys()))
+    return shape_key, TETROMINOS[shape_key], (3, 0)
 
 def main_loop():
     """Main loop of the game."""
     screen = initialize_pygame()
     grid = create_grid()
-    tetromino_shape, tetromino_info = get_random_tetromino()
+    shape_key, tetromino_shape, tetromino_offset = get_random_tetromino()
+    tetromino = (tetromino_shape, tetromino_offset)
     running = True
 
     while running:
         running = handle_events()
-        update_game()
+        tetromino = update_game(tetromino, grid)
         draw_grid(screen, grid)
-        draw_tetromino(screen, tetromino_shape, (tetromino_info[1], tetromino_info[2]))
+        draw_tetromino(screen, shape_key, tetromino[0], tetromino[1])
         pygame.display.update()
 
     pygame.quit()
