@@ -87,6 +87,9 @@ def move_tetromino(tetromino, offset, direction, grid):
         new_y = off_y + 1
         if is_valid_move(shape, (off_x, new_y), grid):
             return shape, (off_x, new_y)
+        else:
+            lock_tetromino(shape, (off_x, off_y), grid)
+            return None  # Indicate that the tetromino has been locked
     elif direction == 'rotate':
         rotated_shape = rotate_tetromino(shape)
         if is_valid_move(rotated_shape, (off_x, off_y), grid):
@@ -112,11 +115,33 @@ def is_valid_move(shape, offset, grid):
     return True
 
 
+def lock_tetromino(shape, offset, grid):
+    """Lock the tetromino in place on the grid."""
+    off_x, off_y = offset
+    for y, row in enumerate(shape):
+        for x, cell in enumerate(row):
+            if cell:
+                grid[y + off_y][x + off_x] = shape_key
+    clear_lines(grid)
+
+
+def clear_lines(grid):
+    """Clear completed lines from the grid."""
+    new_grid = [row for row in grid if any(cell == 0 for cell in row)]
+    lines_cleared = GRID_SIZE[1] - len(new_grid)
+    new_grid = [[0 for _ in range(GRID_SIZE[0])] for _ in range(lines_cleared)] + new_grid
+    for y in range(GRID_SIZE[1]):
+        grid[y] = new_grid[y]
+
+
 def update_game(tetromino, grid, last_time):
     """Update the game state."""
     current_time = pygame.time.get_ticks()
     if current_time - last_time > GRAVITY_SPEED:
         tetromino = move_tetromino(tetromino, tetromino[1], 'down', grid)
+        if tetromino is None:
+            shape_key, tetromino_shape, tetromino_offset = get_random_tetromino()
+            tetromino = (tetromino_shape, tetromino_offset)
         last_time = current_time
 
     keys = pygame.key.get_pressed()
@@ -126,6 +151,9 @@ def update_game(tetromino, grid, last_time):
         tetromino = move_tetromino(tetromino, tetromino[1], 'right', grid)
     if keys[pygame.K_DOWN]:
         tetromino = move_tetromino(tetromino, tetromino[1], 'down', grid)
+        if tetromino is None:
+            shape_key, tetromino_shape, tetromino_offset = get_random_tetromino()
+            tetromino = (tetromino_shape, tetromino_offset)
     if keys[pygame.K_UP]:
         tetromino = move_tetromino(tetromino, tetromino[1], 'rotate', grid)
     return tetromino, last_time
@@ -155,7 +183,8 @@ def main_loop():
         running = handle_events()
         tetromino, last_time = update_game(tetromino, grid, last_time)
         draw_grid(screen, grid)
-        draw_tetromino(screen, shape_key, tetromino[0], tetromino[1])
+        if tetromino:
+            draw_tetromino(screen, shape_key, tetromino[0], tetromino[1])
         pygame.display.update()
 
     pygame.quit()
