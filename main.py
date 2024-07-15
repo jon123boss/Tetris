@@ -1,195 +1,192 @@
 import pygame
-import sys
 import random
+import os
+import json
 
-# Constants
+pygame.init()
+
 WINDOW_SIZE = (300, 600)
-WINDOW_TITLE = "Tetris"
-GRID_SIZE = (10, 20)  # Columns, Rows
-CELL_SIZE = 30
-GRAVITY_SPEED = 500  # Time in milliseconds for tetromino to move down automatically
-MOVE_DELAY = 100  # Delay in milliseconds for lateral movement and rotation
+screen = pygame.display.set_mode(WINDOW_SIZE)
+pygame.display.set_caption("Tetris")
+
+SCORE_PER_LINE = [0, 100, 300, 500, 800]  # Single, double, triple, Tetris
+score = 0  # Initialize the score
+high_score = 0  # Initialize high score
+
+GRID_WIDTH = 10
+GRID_HEIGHT = 20
 
 # Colors
-BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
-COLORS = {
-    'I': (0, 255, 255),
-    'O': (255, 255, 0),
-    'T': (128, 0, 128),
-    'S': (0, 255, 0),
-    'Z': (255, 0, 0),
-    'J': (0, 0, 255),
-    'L': (255, 165, 0),
-}
+BLACK = (0, 0, 0)
+GREY = (128, 128, 128)
 
 # Tetromino shapes
-TETROMINOS = {
-    'I': [[1, 1, 1, 1]],
-    'O': [[1, 1], [1, 1]],
-    'T': [[0, 1, 0], [1, 1, 1]],
-    'S': [[0, 1, 1], [1, 1, 0]],
-    'Z': [[1, 1, 0], [0, 1, 1]],
-    'J': [[1, 0, 0], [1, 1, 1]],
-    'L': [[0, 0, 1], [1, 1, 1]],
-}
+SHAPES = [
+    [[1, 1, 1, 1]],
+    [[1, 1], [1, 1]],
+    [[0, 1, 0], [1, 1, 1]],
+    [[1, 1, 0], [0, 1, 1]],
+    [[0, 1, 1], [1, 1, 0]],
+    [[1, 0, 0], [1, 1, 1]],
+    [[0, 0, 1], [1, 1, 1]]
+]
 
-def initialize_pygame():
-    """Initialize Pygame and create the game window."""
-    pygame.init()
-    screen = pygame.display.set_mode(WINDOW_SIZE)
-    pygame.display.set_caption(WINDOW_TITLE)
-    return screen
 
-def draw_grid(screen, grid):
-    """Draw the grid on the screen."""
-    for y in range(len(grid)):
-        for x in range(len(grid[y])):
-            color = WHITE if grid[y][x] == 0 else COLORS[grid[y][x]]
-            pygame.draw.rect(screen, color, (x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE))
-            pygame.draw.rect(screen, BLACK, (x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE), 1)
+def load_high_score():
+    global high_score
+    if os.path.exists('highscore.json'):
+        with open('highscore.json', 'r') as f:
+            data = json.load(f)
+            high_score = data.get('high_score', 0)
 
-def draw_tetromino(screen, shape_key, tetromino, offset):
-    """Draw the tetromino on the screen."""
-    off_x, off_y = offset
-    color = COLORS[shape_key]
-    for y, row in enumerate(tetromino):
-        for x, cell in enumerate(row):
-            if cell:
-                pygame.draw.rect(screen, color, ((x + off_x) * CELL_SIZE, (y + off_y) * CELL_SIZE, CELL_SIZE, CELL_SIZE))
-                pygame.draw.rect(screen, BLACK, ((x + off_x) * CELL_SIZE, (y + off_y) * CELL_SIZE, CELL_SIZE, CELL_SIZE), 1)
 
-def handle_events():
-    """Handle user input and events."""
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            return False
-    return True
+def save_high_score():
+    global high_score
+    with open('highscore.json', 'w') as f:
+        json.dump({'high_score': high_score}, f)
 
-def move_tetromino(tetromino, offset, direction, grid, shape_key):
-    """Move the tetromino in the specified direction if possible."""
-    shape, (off_x, off_y) = tetromino
-    if direction == 'left':
-        new_x = off_x - 1
-        if is_valid_move(shape, (new_x, off_y), grid):
-            return shape, (new_x, off_y)
-    elif direction == 'right':
-        new_x = off_x + 1
-        if is_valid_move(shape, (new_x, off_y), grid):
-            return shape, (new_x, off_y)
-    elif direction == 'down':
-        new_y = off_y + 1
-        if is_valid_move(shape, (off_x, new_y), grid):
-            return shape, (off_x, new_y)
-        else:
-            lock_tetromino(shape, (off_x, off_y), grid, shape_key)
-            return None  # Indicate that the tetromino has been locked
-    elif direction == 'rotate':
-        rotated_shape = rotate_tetromino(shape)
-        if is_valid_move(rotated_shape, (off_x, off_y), grid):
-            return rotated_shape, (off_x, off_y)
-    return tetromino
 
-def rotate_tetromino(shape):
-    """Rotate the tetromino shape."""
-    return [[shape[y][x] for y in range(len(shape))] for x in range(len(shape[0]) - 1, -1, -1)]
+def new_tetromino():
+    shape = random.choice(SHAPES)
+    return shape, [0, GRID_WIDTH // 2 - len(shape[0]) // 2]
 
-def is_valid_move(shape, offset, grid):
-    """Check if the tetromino move is valid within the grid."""
+
+def valid_position(grid, shape, offset):
     off_x, off_y = offset
     for y, row in enumerate(shape):
         for x, cell in enumerate(row):
             if cell:
-                new_x, new_y = x + off_x, y + off_y
-                if new_x < 0 or new_x >= GRID_SIZE[0] or new_y >= GRID_SIZE[1] or (new_y >= 0 and grid[new_y][new_x] != 0):
+                if x + off_x < 0 or x + off_x >= GRID_WIDTH or y + off_y >= GRID_HEIGHT or grid[y + off_y][x + off_x]:
                     return False
     return True
 
-def lock_tetromino(shape, offset, grid, shape_key):
-    """Lock the tetromino in place on the grid."""
+
+def join_matrixes(grid, shape, offset):
     off_x, off_y = offset
     for y, row in enumerate(shape):
         for x, cell in enumerate(row):
             if cell:
-                grid[y + off_y][x + off_x] = shape_key
-    clear_lines(grid)
+                grid[y + off_y][x + off_x] = cell
+    return grid
+
 
 def clear_lines(grid):
-    """Clear completed lines from the grid."""
-    new_grid = [row for row in grid if any(cell == 0 for cell in row)]
-    lines_cleared = GRID_SIZE[1] - len(new_grid)
-    new_grid = [[0 for _ in range(GRID_SIZE[0])] for _ in range(lines_cleared)] + new_grid
-    for y in range(GRID_SIZE[1]):
-        grid[y] = new_grid[y]
+    lines_to_clear = []
+    for i, row in enumerate(grid):
+        if all(row):
+            lines_to_clear.append(i)
 
-def update_game(tetromino, grid, last_time, last_move_time, shape_key):
-    """Update the game state."""
-    current_time = pygame.time.get_ticks()
-    if current_time - last_time > GRAVITY_SPEED:
-        tetromino = move_tetromino(tetromino, tetromino[1], 'down', grid, shape_key)
-        if tetromino is None:
-            shape_key, tetromino_shape, tetromino_offset = get_random_tetromino()
-            if not is_valid_move(tetromino_shape, tetromino_offset, grid):
-                return None, last_time, last_move_time  # Game over
-            tetromino = (tetromino_shape, tetromino_offset)
-        last_time = current_time
+    lines_cleared = len(lines_to_clear)
+    if lines_cleared > 0:
+        global score, high_score
+        score += SCORE_PER_LINE[lines_cleared]  # Update the score based on lines cleared
+        high_score = max(high_score, score)  # Update the high score if current score is higher
+        for i in lines_to_clear:
+            del grid[i]
+            grid.insert(0, [0 for _ in range(len(grid[0]))])  # Add a new empty row at the top
 
-    keys = pygame.key.get_pressed()
-    if current_time - last_move_time > MOVE_DELAY:
-        if keys[pygame.K_LEFT]:
-            tetromino = move_tetromino(tetromino, tetromino[1], 'left', grid, shape_key)
-        if keys[pygame.K_RIGHT]:
-            tetromino = move_tetromino(tetromino, tetromino[1], 'right', grid, shape_key)
-        if keys[pygame.K_DOWN]:
-            tetromino = move_tetromino(tetromino, tetromino[1], 'down', grid, shape_key)
-            if tetromino is None:
-                shape_key, tetromino_shape, tetromino_offset = get_random_tetromino()
-                if not is_valid_move(tetromino_shape, tetromino_offset, grid):
-                    return None, last_time, last_move_time  # Game over
-                tetromino = (tetromino_shape, tetromino_offset)
-        if keys[pygame.K_UP]:
-            tetromino = move_tetromino(tetromino, tetromino[1], 'rotate', grid, shape_key)
-        last_move_time = current_time
+    return lines_cleared
 
-    return tetromino, last_time, last_move_time
 
-def create_grid():
-    """Create a 2D array to represent the grid."""
-    return [[0 for _ in range(GRID_SIZE[0])] for _ in range(GRID_SIZE[1])]
+def draw_score(screen):
+    font = pygame.font.Font(None, 36)
+    score_text = font.render(f"Score: {score}", True, WHITE)
+    high_score_text = font.render(f"High Score: {high_score}", True, WHITE)
+    screen.blit(score_text, (10, 10))
+    screen.blit(high_score_text, (10, 50))
 
-def get_random_tetromino():
-    """Return a random tetromino shape."""
-    shape_key = random.choice(list(TETROMINOS.keys()))
-    return shape_key, TETROMINOS[shape_key], (3, 0)  # Start in the middle of the grid horizontally
+
+def draw_grid(screen, grid):
+    for y, row in enumerate(grid):
+        for x, cell in enumerate(row):
+            if cell:
+                pygame.draw.rect(screen, WHITE, (x * 30, y * 30, 30, 30), 0)
+                pygame.draw.rect(screen, GREY, (x * 30, y * 30, 30, 30), 1)
+
+
+def draw_tetromino(screen, shape, offset):
+    off_x, off_y = offset
+    for y, row in enumerate(shape):
+        for x, cell in enumerate(row):
+            if cell:
+                pygame.draw.rect(screen, WHITE, ((x + off_x) * 30, (y + off_y) * 30, 30, 30), 0)
+                pygame.draw.rect(screen, GREY, ((x + off_x) * 30, (y + off_y) * 30, 30, 30), 1)
+
+
+def game_over(grid):
+    for cell in grid[0]:
+        if cell:
+            return True
+    return False
+
 
 def main_loop():
-    """Main loop of the game."""
-    screen = initialize_pygame()
-    grid = create_grid()
-    shape_key, tetromino_shape, tetromino_offset = get_random_tetromino()
-    if not is_valid_move(tetromino_shape, tetromino_offset, grid):
-        print("Game Over!")
-        pygame.quit()
-        sys.exit()
-    tetromino = (tetromino_shape, tetromino_offset)
-    last_time = pygame.time.get_ticks()
-    last_move_time = pygame.time.get_ticks()
-    running = True
+    global score
+    grid = [[0 for _ in range(GRID_WIDTH)] for _ in range(GRID_HEIGHT)]
+    shape, offset = new_tetromino()
+    clock = pygame.time.Clock()
+    fall_time = 0
 
+    load_high_score()
+
+    running = True
     while running:
-        running = handle_events()
-        tetromino, last_time, last_move_time = update_game(tetromino, grid, last_time, last_move_time, shape_key)
-        if tetromino is None:
-            print("Game Over!")
-            running = False
-            continue
+        fall_speed = 500  # Milliseconds - adjust this value to change fall speed
+        fall_time += clock.get_rawtime()
+        clock.tick()
+
+        if fall_time >= fall_speed:
+            fall_time = 0
+            offset[1] += 1  # Move the tetromino down vertically
+            if not valid_position(grid, shape, offset):
+                offset[1] -= 1
+                grid = join_matrixes(grid, shape, offset)
+                clear_lines(grid)
+                shape, offset = new_tetromino()
+                if not valid_position(grid, shape, offset):
+                    running = False
+                    save_high_score()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+                save_high_score()
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_LEFT:
+                    offset[0] -= 1
+                    if not valid_position(grid, shape, offset):
+                        offset[0] += 1
+                elif event.key == pygame.K_RIGHT:
+                    offset[0] += 1
+                    if not valid_position(grid, shape, offset):
+                        offset[0] -= 1
+                elif event.key == pygame.K_DOWN:
+                    offset[1] += 1
+                    if not valid_position(grid, shape, offset):
+                        offset[1] -= 1
+                elif event.key == pygame.K_UP:
+                    shape = [list(row) for row in zip(*shape[::-1])]
+                    if not valid_position(grid, shape, offset):
+                        shape = [list(row) for row in zip(*shape)][::-1]
+
+        screen.fill(BLACK)
         draw_grid(screen, grid)
-        if tetromino:
-            draw_tetromino(screen, shape_key, tetromino[0], tetromino[1])
-        pygame.display.update()
+        draw_tetromino(screen, shape, offset)
+        draw_score(screen)
+        pygame.display.flip()
+
+    # Game Over Screen
+    font = pygame.font.Font(None, 72)
+    game_over_text = font.render("Game Over", True, (255, 0, 0))
+    game_over_rect = game_over_text.get_rect(center=(WINDOW_SIZE[0] // 2, WINDOW_SIZE[1] // 2))
+    screen.blit(game_over_text, game_over_rect)
+    pygame.display.flip()
+    pygame.time.wait(3000)
 
     pygame.quit()
-    sys.exit()
+
+
 
 if __name__ == "__main__":
     main_loop()
