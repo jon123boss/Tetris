@@ -129,6 +129,8 @@ def update_game(tetromino, grid, last_time, last_move_time, shape_key):
         tetromino = move_tetromino(tetromino, tetromino[1], 'down', grid, shape_key)
         if tetromino is None:
             shape_key, tetromino_shape, tetromino_offset = get_random_tetromino()
+            if not is_valid_move(tetromino_shape, tetromino_offset, grid):
+                return None, last_time, last_move_time  # Game over
             tetromino = (tetromino_shape, tetromino_offset)
         last_time = current_time
 
@@ -142,6 +144,8 @@ def update_game(tetromino, grid, last_time, last_move_time, shape_key):
             tetromino = move_tetromino(tetromino, tetromino[1], 'down', grid, shape_key)
             if tetromino is None:
                 shape_key, tetromino_shape, tetromino_offset = get_random_tetromino()
+                if not is_valid_move(tetromino_shape, tetromino_offset, grid):
+                    return None, last_time, last_move_time  # Game over
                 tetromino = (tetromino_shape, tetromino_offset)
         if keys[pygame.K_UP]:
             tetromino = move_tetromino(tetromino, tetromino[1], 'rotate', grid, shape_key)
@@ -163,6 +167,10 @@ def main_loop():
     screen = initialize_pygame()
     grid = create_grid()
     shape_key, tetromino_shape, tetromino_offset = get_random_tetromino()
+    if not is_valid_move(tetromino_shape, tetromino_offset, grid):
+        print("Game Over!")
+        pygame.quit()
+        sys.exit()
     tetromino = (tetromino_shape, tetromino_offset)
     last_time = pygame.time.get_ticks()
     last_move_time = pygame.time.get_ticks()
@@ -171,6 +179,10 @@ def main_loop():
     while running:
         running = handle_events()
         tetromino, last_time, last_move_time = update_game(tetromino, grid, last_time, last_move_time, shape_key)
+        if tetromino is None:
+            print("Game Over!")
+            running = False
+            continue
         draw_grid(screen, grid)
         if tetromino:
             draw_tetromino(screen, shape_key, tetromino[0], tetromino[1])
