@@ -20,6 +20,12 @@ GRID_HEIGHT = 20
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 GREY = (128, 128, 128)
+BLUE = (0, 0, 255)
+RED = (255, 0, 0)
+GREEN = (0, 255, 0)
+YELLOW = (255, 255, 0)
+ORANGE = (255, 165, 0)
+PURPLE = (128, 0, 128)
 
 # Tetromino shapes
 SHAPES = [
@@ -113,19 +119,54 @@ def draw_grid(screen, grid):
     for y, row in enumerate(grid):
         for x, cell in enumerate(row):
             if cell:
-                pygame.draw.rect(screen, WHITE, (x * 30, y * 30, 30, 30), 0)
-                pygame.draw.rect(screen, GREY, (x * 30, y * 30, 30, 30), 1)
+                color = get_color(cell)
+                pygame.draw.rect(screen, color, (x * 30, y * 30, 30, 30), 0)
+                pygame.draw.rect(screen, BLACK, (x * 30, y * 30, 30, 30), 1)
 
 def draw_tetromino(screen, shape, offset):
     off_x, off_y = offset
     for y, row in enumerate(shape):
         for x, cell in enumerate(row):
             if cell:
-                pygame.draw.rect(screen, WHITE, ((x + off_x) * 30, (y + off_y) * 30, 30, 30), 0)
-                pygame.draw.rect(screen, GREY, ((x + off_x) * 30, (y + off_y) * 30, 30, 30), 1)
+                color = get_color(cell)
+                pygame.draw.rect(screen, color, ((x + off_x) * 30, (y + off_y) * 30, 30, 30), 0)
+                pygame.draw.rect(screen, BLACK, ((x + off_x) * 30, (y + off_y) * 30, 30, 30), 1)
+
+def get_color(value):
+    colors = [BLACK, BLUE, RED, GREEN, YELLOW, ORANGE, PURPLE]
+    return colors[value]
+
+def start_screen():
+    screen.fill(BLACK)
+    font = pygame.font.Font(None, 36)
+    title_text = font.render("Tetris", True, WHITE)
+    start_text = font.render("Press Space to Start", True, WHITE)
+    screen.blit(title_text, (WINDOW_SIZE[0] // 2 - title_text.get_width() // 2, 200))
+    screen.blit(start_text, (WINDOW_SIZE[0] // 2 - start_text.get_width() // 2, 300))
+    pygame.display.flip()
+    waiting = True
+    while waiting:
+        for event in pygame.event.get():
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_SPACE:
+                    return
+
+def game_over_screen():
+    screen.fill(BLACK)
+    font = pygame.font.Font(None, 36)
+    game_over_text = font.render("Game Over", True, RED)
+    score_text = font.render(f"Score: {score}", True, WHITE)
+    high_score_text = font.render(f"High Score: {high_score}", True, WHITE)
+    screen.blit(game_over_text, (WINDOW_SIZE[0] // 2 - game_over_text.get_width() // 2, 200))
+    screen.blit(score_text, (WINDOW_SIZE[0] // 2 - score_text.get_width() // 2, 300))
+    screen.blit(high_score_text, (WINDOW_SIZE[0] // 2 - high_score_text.get_width() // 2, 350))
+    pygame.display.flip()
+    pygame.time.wait(3000)
 
 def main_loop():
-    global score
+    global score, current_level, lines_cleared_total
+    start_screen()
+
     grid = [[0 for _ in range(GRID_WIDTH)] for _ in range(GRID_HEIGHT)]
     shape, offset = new_tetromino()
     clock = pygame.time.Clock()
@@ -135,60 +176,63 @@ def main_loop():
     load_high_score()
 
     running = True
+    paused = False
     while running:
-        fall_time += clock.get_rawtime()
-        clock.tick()
+        if not paused:
+            fall_time += clock.get_rawtime()
+            clock.tick()
 
-        if fall_time >= fall_speed:
-            fall_time = 0
-            offset[1] += 1  # Move the tetromino down vertically
-            if not valid_position(grid, shape, offset):
-                offset[1] -= 1
-                grid = join_matrixes(grid, shape, offset)
-                clear_lines(grid)
-                shape, offset = new_tetromino()
+            if fall_time >= fall_speed:
+                fall_time = 0
+                offset[1] += 1  # Move the tetromino down vertically
                 if not valid_position(grid, shape, offset):
+                    offset[1] -= 1
+                    grid = join_matrixes(grid, shape, offset)
+                    lines_cleared = clear_lines(grid)
+                    shape, offset = new_tetromino()
+                    if not valid_position(grid, shape, offset):
+                        game_over_screen()
+                        running = False
+                        save_high_score()
+
+                    # Adjust fall speed based on level
+                    fall_speed = max(FALL_SPEED - (current_level - 1) * SPEED_INCREASE, 50)  # Ensure speed doesn't drop below 50ms
+
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
                     running = False
                     save_high_score()
-
-            # Adjust fall speed based on level
-            fall_speed = max(FALL_SPEED - (current_level - 1) * SPEED_INCREASE, 50)  # Ensure speed doesn't drop below 50ms
-
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-                save_high_score()
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_LEFT:
-                    offset[0] -= 1
-                    if not valid_position(grid, shape, offset):
-                        offset[0] += 1
-                elif event.key == pygame.K_RIGHT:
-                    offset[0] += 1
-                    if not valid_position(grid, shape, offset):
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_LEFT:
                         offset[0] -= 1
-                elif event.key == pygame.K_DOWN:
-                    offset[1] += 1
-                    if not valid_position(grid, shape, offset):
-                        offset[1] -= 1
-                elif event.key == pygame.K_UP:
-                    shape = [list(row) for row in zip(*shape[::-1])]
-                    if not valid_position(grid, shape, offset):
-                        shape = [list(row) for row in zip(*shape)][::-1]
+                        if not valid_position(grid, shape, offset):
+                            offset[0] += 1
+                    elif event.key == pygame.K_RIGHT:
+                        offset[0] += 1
+                        if not valid_position(grid, shape, offset):
+                            offset[0] -= 1
+                    elif event.key == pygame.K_DOWN:
+                        offset[1] += 1
+                        if not valid_position(grid, shape, offset):
+                            offset[1] -= 1
+                    elif event.key == pygame.K_UP:
+                        shape = [list(row) for row in zip(*shape[::-1])]
+                        if not valid_position(grid, shape, offset):
+                            shape = [list(row) for row in zip(*shape)][::-1]
+                    elif event.key == pygame.K_SPACE:
+                        paused = not paused
 
-        screen.fill(BLACK)
-        draw_grid(screen, grid)
-        draw_tetromino(screen, shape, offset)
-        draw_score(screen)
-        pygame.display.flip()
-
-    # Game Over Screen
-    font = pygame.font.Font(None, 72)
-    game_over_text = font.render("Game Over", True, (255, 0, 0))
-    game_over_rect = game_over_text.get_rect(center=(WINDOW_SIZE[0] // 2, WINDOW_SIZE[1] // 2))
-    screen.blit(game_over_text, game_over_rect)
-    pygame.display.flip()
-    pygame.time.wait(3000)
+            screen.fill(BLACK)
+            draw_grid(screen, grid)
+            draw_tetromino(screen, shape, offset)
+            draw_score(screen)
+            pygame.display.flip()
+        else:
+            # Draw pause screen
+            font = pygame.font.Font(None, 36)
+            pause_text = font.render("Paused", True, WHITE)
+            screen.blit(pause_text, (WINDOW_SIZE[0] // 2 - pause_text.get_width() // 2, WINDOW_SIZE[1] // 2))
+            pygame.display.flip()
 
     pygame.quit()
 
